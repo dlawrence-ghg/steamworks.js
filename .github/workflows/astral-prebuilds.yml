@@ -1,0 +1,118 @@
+# Builds all four platform binaries and commits dist/ back to this branch, so
+# the branch works as a plain npm git-dependency (Astral Outpost desktop points
+# at github:dlawrence-ghg/steamworks.js#astral-leaderboards). Mirrors the
+# upstream publish.yml build jobs; the deploy step is replaced by the commit.
+name: Astral prebuilds
+
+on:
+    push:
+        branches: [astral-leaderboards]
+    workflow_dispatch:
+
+env:
+    DEBUG: 'napi:*'
+    MACOSX_DEPLOYMENT_TARGET: '10.13'
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        # Run in ubuntu:20.04 container to avoid the issue with glibc version
+        container:
+            image: ubuntu:20.04
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22.x
+
+            - run: apt-get update && apt-get install -y curl build-essential
+
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  toolchain: stable
+                  targets: x86_64-pc-windows-msvc, x86_64-unknown-linux-gnu
+
+            - uses: Swatinem/rust-cache@v2
+
+            - run: cargo install cargo-xwin
+
+            - name: Node install
+              run: npm ci
+
+            - name: Build Linux
+              run: npm run build -- --target x86_64-unknown-linux-gnu
+
+            - name: Build Windows
+              run: npm run build -- --target x86_64-pc-windows-msvc
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binaries-windows-linux
+                  path: dist
+                  if-no-files-found: error
+
+    build-mac:
+        runs-on: macos-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22.x
+
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  toolchain: stable
+                  targets: x86_64-apple-darwin, aarch64-apple-darwin
+
+            - uses: Swatinem/rust-cache@v2
+
+            - name: Node install
+              run: npm ci
+
+            - name: Build Mac x64
+              run: npm run build -- --target x86_64-apple-darwin
+
+            - name: Build Mac arm64
+              run: npm run build -- --target aarch64-apple-darwin
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binaries-macos
+                  path: dist
+                  if-no-files-found: error
+
+    commit-binaries:
+        runs-on: ubuntu-latest
+        needs: [build, build-mac]
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Download builds
+              uses: actions/download-artifact@v4
+              with:
+                  path: dist/
+                  pattern: binaries-*
+                  merge-multiple: true
+
+            - name: Commit prebuilt binaries
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git add -f dist
+                  # [skip ci] prevents this commit from retriggering the workflow.
+                  git diff --cached --quiet || git commit -m "ci: prebuilt binaries for all targets [skip ci]"
+                  git push
