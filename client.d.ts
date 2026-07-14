@@ -113,6 +113,51 @@ export declare namespace input {
     getHandle(): bigint
   }
 }
+export declare namespace leaderboard {
+  export const enum LeaderboardSortMethod {
+    Ascending = 0,
+    Descending = 1
+  }
+  export const enum LeaderboardDisplayType {
+    Numeric = 0,
+    TimeSeconds = 1,
+    TimeMilliSeconds = 2
+  }
+  export const enum LeaderboardUploadMethod {
+    KeepBest = 0,
+    ForceUpdate = 1
+  }
+  export const enum LeaderboardDataRequest {
+    Global = 0,
+    GlobalAroundUser = 1,
+    Friends = 2
+  }
+  export interface LeaderboardUploadResult {
+    score: number
+    wasChanged: boolean
+    globalRankNew: number
+    globalRankPrevious: number
+  }
+  export interface LeaderboardEntry {
+    steamId: bigint
+    globalRank: number
+    score: number
+    details: Array<number>
+  }
+  /**
+   * Find the leaderboard, creating it with the given sort/display if it
+   * doesn't exist yet. Returns the raw 64-bit handle. Handles are cached by
+   * name for the lifetime of the process.
+   */
+  export function findOrCreate(name: string, sort: LeaderboardSortMethod, display: LeaderboardDisplayType): Promise<bigint>
+  /**
+   * Upload a score (finding/creating the board first if needed). Returns the
+   * upload result, or an error if Steam rejected the score.
+   */
+  export function uploadScore(name: string, sort: LeaderboardSortMethod, display: LeaderboardDisplayType, method: LeaderboardUploadMethod, score: number): Promise<LeaderboardUploadResult>
+  /** Download entries [start, end] (1-based ranks for Global requests). */
+  export function downloadEntries(name: string, sort: LeaderboardSortMethod, display: LeaderboardDisplayType, request: LeaderboardDataRequest, start: number, end: number): Promise<Array<LeaderboardEntry>>
+}
 export declare namespace localplayer {
   export function getSteamId(): PlayerSteamId
   export function getName(): string
@@ -336,6 +381,7 @@ export declare namespace workshop {
    * @returns an array of subscribed workshop item ids
    */
   export function getSubscribedItems(): Array<bigint>
+  export function deleteItem(itemId: bigint): Promise<void>
   export const enum UGCQueryType {
     RankedByVote = 0,
     RankedByPublicationDate = 1,
