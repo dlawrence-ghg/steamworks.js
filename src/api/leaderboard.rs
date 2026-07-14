@@ -44,6 +44,10 @@ pub mod leaderboard {
     #[napi(object)]
     pub struct LeaderboardEntry {
         pub steam_id: BigInt,
+        /// Persona name, resolved best-effort: friends and the local player are
+        /// always known; strangers are fetched via RequestUserInformation with a
+        /// short settle — a name Steam hasn't delivered yet comes back "".
+        pub name: String,
         pub global_rank: i32,
         pub score: i32,
         pub details: Vec<i32>,
@@ -185,15 +189,28 @@ pub mod leaderboard {
         );
 
         match rx.await.unwrap() {
-            Ok(entries) => Ok(entries
-                .into_iter()
-                .map(|e| LeaderboardEntry {
-                    steam_id: BigInt::from(e.user.raw()),
-                    global_rank: e.global_rank,
-                    score: e.score,
-                    details: e.details,
-                })
-                .collect()),
+            Ok(entries) => {
+                // Ask Steam for any persona names it doesn't have cached yet
+                // (returns true when a fetch was actually needed), then give the
+                // callback pump one short window to deliver them.
+                let mut pending = false;
+                for e in &entries {
+                    pending |= client.friends().request_user_information(e.user, true);
+                }
+                if pending {
+                    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                }
+                Ok(entries
+                    .into_iter()
+                    .map(|e| LeaderboardEntry {
+                        steam_id: BigInt::from(e.user.raw()),
+                        name: client.friends().get_friend(e.user).name(),
+                        global_rank: e.global_rank,
+                        score: e.score,
+                        details: e.details,
+                    })
+                    .collect())
+            }
             Err(e) => Err(Error::from_reason(e.to_string())),
         }
     }

@@ -140,6 +140,12 @@ export declare namespace leaderboard {
   }
   export interface LeaderboardEntry {
     steamId: bigint
+    /**
+     * Persona name, resolved best-effort: friends and the local player are
+     * always known; strangers are fetched via RequestUserInformation with a
+     * short settle — a name Steam hasn't delivered yet comes back "".
+     */
+    name: string
     globalRank: number
     score: number
     details: Array<number>
